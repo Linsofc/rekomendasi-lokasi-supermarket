@@ -38,45 +38,20 @@ try {
     $count = $stmt->fetchColumn();
     
     if ($count == 0) {
-        echo "Tabel masih kosong, mulai mengimpor data dari CSV...<br>";
-        $csvFile = __DIR__ . '/data_lokasi.csv';
+        echo "Tabel masih kosong, mulai mengimpor data awal langsung ke database...<br>";
         
-        if (file_exists($csvFile)) {
-            if (($handle = fopen($csvFile, "r")) !== FALSE) {
-                // Baca header
-                $headers = fgetcsv($handle, 1000, ",");
-                
-                $insertQuery = "
-                INSERT INTO lokasi (nama_daerah, latitude, longitude, biaya_pembangunan, kepadatan_penduduk, daya_beli)
-                VALUES (:nama_daerah, :latitude, :longitude, :biaya_pembangunan, :kepadatan_penduduk, :daya_beli)
-                ";
-                $stmtInsert = $pdo->prepare($insertQuery);
-                
-                $rowCount = 0;
-                while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
-                    // Mapping data:
-                    // id_lokasi, nama_daerah, latitude, longitude, biaya_pembangunan, kepadatan_penduduk, daya_beli
-                    // data[0] = id_lokasi, data[1] = nama_daerah, data[2] = latitude, data[3] = longitude,
-                    // data[4] = biaya_pembangunan, data[5] = kepadatan_penduduk, data[6] = daya_beli
-                    
-                    $stmtInsert->execute([
-                        ':nama_daerah' => $data[1],
-                        ':latitude' => (float)$data[2],
-                        ':longitude' => (float)$data[3],
-                        ':biaya_pembangunan' => (int)$data[4],
-                        ':kepadatan_penduduk' => (int)$data[5],
-                        ':daya_beli' => (int)$data[6]
-                    ]);
-                    $rowCount++;
-                }
-                fclose($handle);
-                echo "Berhasil mengimpor $rowCount data dari CSV.<br>";
-            } else {
-                echo "Gagal membuka file CSV!<br>";
-            }
-        } else {
-            echo "File CSV tidak ditemukan di $csvFile!<br>";
-        }
+        $insertQuery = "
+        INSERT INTO lokasi (nama_daerah, latitude, longitude, biaya_pembangunan, kepadatan_penduduk, daya_beli)
+        VALUES 
+        ('Kawasan Pusat Kota', -7.250445, 112.768845, 500, 800, 400),
+        ('Kawasan Pinggiran', -7.275614, 112.791567, 300, 400, 250),
+        ('Kawasan Industri', -7.319562, 112.738812, 400, 600, 300),
+        ('Kawasan Residensial', -7.289166, 112.675545, 200, 500, 350),
+        ('Kawasan Bisnis', -7.262536, 112.742512, 600, 900, 500)
+        ";
+        
+        $pdo->exec($insertQuery);
+        echo "Data awal berhasil diimpor langsung ke database.<br>";
     } else {
         echo "Tabel 'lokasi' sudah berisi data. Lewati proses impor.<br>";
     }

@@ -1,6 +1,0 @@
-id_lokasi,nama_daerah,latitude,longitude,biaya_pembangunan,kepadatan_penduduk,daya_beli
-1,Kawasan Pusat Kota,-7.250445,112.768845,500,800,400
-2,Kawasan Pinggiran,-7.275614,112.791567,300,400,250
-3,Kawasan Industri,-7.319562,112.738812,400,600,300
-4,Kawasan Residensial,-7.289166,112.675545,200,500,350
-5,Kawasan Bisnis,-7.262536,112.742512,600,900,500
