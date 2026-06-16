@@ -6,6 +6,8 @@ $hasilGreedy = null;
 $hasilDp = null;
 $waktuGreedy = 0;
 $waktuDp = 0;
+$hasilBnB = null;
+$waktuBnB = 0;
 $budget = '';
 $jarak = '';
 $dataPoints = [];
@@ -26,24 +28,30 @@ try {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$dbEmpty && !$dbError) {
     $budget = isset($_POST['budget']) ? (int)$_POST['budget'] : 0;
     $jarak = isset($_POST['jarak']) ? (float)str_replace(',', '.', $_POST['jarak']) : 0.0;
-    
+
     $daftarLokasi = load_and_preprocess_data();
-    
+
     if (count($daftarLokasi) > 0) {
         // Eksekusi Greedy
         $startGreedy = hrtime(true);
         $hasilGreedy = jalankanGreedy($daftarLokasi, $budget, $jarak);
         $waktuGreedy = (hrtime(true) - $startGreedy) / 1e9; // Konversi ke detik
-        
+
         // Eksekusi DP
         $startDp = hrtime(true);
         $hasilDp = jalankanDp($daftarLokasi, $budget);
         $waktuDp = (hrtime(true) - $startDp) / 1e9; // Konversi ke detik
+
+        // Eksekusi Branch and Bound
+        $startBnB = hrtime(true);
+        $hasilBnB = jalankanBnB($daftarLokasi, $budget, $jarak);
+        $waktuBnB = (hrtime(true) - $startBnB) / 1e9;
     }
 }
 ?>
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -151,6 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$dbEmpty && !$dbError) {
             .form-grid {
                 grid-template-columns: 1fr;
             }
+
             header {
                 flex-direction: column;
                 align-items: flex-start;
@@ -361,243 +370,306 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$dbEmpty && !$dbError) {
         }
     </style>
 </head>
+
 <body>
 
-<div class="container">
-    <header>
-        <div>
-            <h1>Optimasi Lokasi Supermarket</h1>
-            <p style="color: var(--text-muted); margin-top: 4px;">Tentukan koordinat cabang baru dengan alokasi budget efisien.</p>
-        </div>
-        <a href="kelola_lokasi.php" class="btn-manage">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
-            Kelola Data Lokasi
-        </a>
-    </header>
-
-    <?php if ($dbError): ?>
-        <div class="alert alert-info" style="background-color: #fee2e2; border-color: #fca5a5; color: #b91c1c;">
-            <strong>Koneksi Database Gagal!</strong><br>
-            Detail Error: <?= htmlspecialchars($dbError) ?><br><br>
-            Silakan jalankan database setup dengan membuka <a href="db_setup.php" style="color: #b91c1c; text-decoration: underline;">db_setup.php</a>.
-        </div>
-    <?php elseif ($dbEmpty): ?>
-        <div class="alert alert-info">
-            <strong>Database Kosong!</strong><br>
-            Data lokasi belum tersedia di database. Silakan lakukan inisialisasi awal database dengan mengklik tombol di bawah ini:
-            <div style="margin-top: 12px;">
-                <a href="db_setup.php" class="btn-manage" style="padding: 8px 16px; font-size: 0.85rem; background-color: var(--success);">Inisialisasi Database</a>
+    <div class="container">
+        <header>
+            <div>
+                <h1>Optimasi Lokasi Supermarket</h1>
+                <p style="color: var(--text-muted); margin-top: 4px;">Tentukan koordinat cabang baru dengan alokasi budget efisien.</p>
             </div>
-        </div>
-    <?php endif; ?>
+            <a href="kelola_lokasi.php" class="btn-manage">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="7" height="9"></rect>
+                    <rect x="14" y="3" width="7" height="5"></rect>
+                    <rect x="14" y="12" width="7" height="9"></rect>
+                    <rect x="3" y="16" width="7" height="5"></rect>
+                </svg>
+                Kelola Data Lokasi
+            </a>
+        </header>
 
-    <div class="card-form">
-        <form method="POST" action="index.php">
-            <div class="form-grid">
-                <div class="form-group">
-                    <label for="budget">Budget Maksimal (Juta Rp):</label>
-                    <input type="number" id="budget" name="budget" required placeholder="Contoh: 1000" value="<?= htmlspecialchars($budget) ?>">
-                </div>
-                <div class="form-group">
-                    <label for="jarak">Jarak Minimum Antar Lokasi (KM):</label>
-                    <input type="number" step="0.1" id="jarak" name="jarak" required placeholder="Contoh: 2.5" value="<?= htmlspecialchars($jarak) ?>">
+        <?php if ($dbError): ?>
+            <div class="alert alert-info" style="background-color: #fee2e2; border-color: #fca5a5; color: #b91c1c;">
+                <strong>Koneksi Database Gagal!</strong><br>
+                Detail Error: <?= htmlspecialchars($dbError) ?><br><br>
+                Silakan jalankan database setup dengan membuka <a href="db_setup.php" style="color: #b91c1c; text-decoration: underline;">db_setup.php</a>.
+            </div>
+        <?php elseif ($dbEmpty): ?>
+            <div class="alert alert-info">
+                <strong>Database Kosong!</strong><br>
+                Data lokasi belum tersedia di database. Silakan lakukan inisialisasi awal database dengan mengklik tombol di bawah ini:
+                <div style="margin-top: 12px;">
+                    <a href="db_setup.php" class="btn-manage" style="padding: 8px 16px; font-size: 0.85rem; background-color: var(--success);">Inisialisasi Database</a>
                 </div>
             </div>
-            <button type="submit" class="btn-calculate" <?= ($dbEmpty || $dbError) ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : '' ?>>
-                Hitung Optimasi Rekomendasi
-            </button>
-        </form>
+        <?php endif; ?>
+
+        <div class="card-form">
+            <form method="POST" action="index.php">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="budget">Budget Maksimal (Juta Rp):</label>
+                        <input type="number" id="budget" name="budget" required placeholder="Contoh: 1000" value="<?= htmlspecialchars($budget) ?>">
+                    </div>
+                    <div class="form-group">
+                        <label for="jarak">Jarak Minimum Antar Lokasi (KM):</label>
+                        <input type="number" step="0.1" id="jarak" name="jarak" required placeholder="Contoh: 2.5" value="<?= htmlspecialchars($jarak) ?>">
+                    </div>
+                </div>
+                <button type="submit" class="btn-calculate" <?= ($dbEmpty || $dbError) ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : '' ?>>
+                    Hitung Optimasi Rekomendasi
+                </button>
+            </form>
+        </div>
+
+        <?php if ($hasilGreedy !== null && $hasilDp !== null): ?>
+            <h2 class="results-header">Hasil Analisis Optimasi</h2>
+
+            <!-- Kesimpulan Card -->
+            <div class="alert alert-success">
+                <h3 style="margin-top: 0; font-size: 1.15rem; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                    Kesimpulan Komparasi Rekomendasi
+                </h3>
+                <?php if ($hasilDp['totalValue'] > $hasilGreedy['totalValue']): ?>
+                    <p>Metode <strong>Dynamic Programming (DP)</strong> memberikan hasil yang lebih baik karena menghasilkan Total Value yang lebih besar (<strong><?= $hasilDp['totalValue'] ?></strong>) dibandingkan Greedy (<strong><?= $hasilGreedy['totalValue'] ?></strong>).</p>
+                <?php elseif ($hasilGreedy['totalValue'] > $hasilDp['totalValue']): ?>
+                    <p>Metode <strong>Greedy</strong> memberikan hasil yang lebih baik dengan Total Value yang lebih besar (<strong><?= $hasilGreedy['totalValue'] ?></strong>) dibandingkan DP (<strong><?= $hasilDp['totalValue'] ?></strong>).</p>
+                <?php else: ?>
+                    <p>Kedua metode menghasilkan Total Value yang sama (<strong><?= $hasilGreedy['totalValue'] ?></strong>). Namun, jika ditinjau dari waktu komputasi:</p>
+                    <p style="margin-top: 6px; font-weight: 500;">
+                        <?php if ($waktuGreedy < $waktuDp): ?>
+                            Metode <strong>Greedy</strong> lebih disarankan karena mengeksekusi algoritma lebih cepat (<strong><?= number_format($waktuGreedy, 8) ?> detik</strong>) dibandingkan DP (<strong><?= number_format($waktuDp, 8) ?> detik</strong>).
+                        <?php elseif ($waktuDp < $waktuGreedy): ?>
+                            Metode <strong>Dynamic Programming (DP)</strong> lebih disarankan karena mengeksekusi algoritma lebih cepat (<strong><?= number_format($waktuDp, 8) ?> detik</strong>) dibandingkan Greedy (<strong><?= number_format($waktuGreedy, 8) ?> detik</strong>).
+                        <?php else: ?>
+                            Keduanya memiliki waktu eksekusi yang identik.
+                        <?php endif; ?>
+                    </p>
+                <?php endif; ?>
+            </div>
+
+            <div class="grid-results">
+                <!-- Greedy Card -->
+                <div class="card-result">
+                    <h3>
+                        1. Pendekatan Greedy
+                        <span class="method-badge badge-greedy">Greedy</span>
+                    </h3>
+                    <div class="meta-info">
+                        <div>Value: <strong><?= $hasilGreedy['totalValue'] ?></strong></div>
+                        <div>Cost: <strong>Rp <?= number_format($hasilGreedy['totalCost'], 0, ',', '.') ?> Jt</strong></div>
+                        <div>Waktu: <strong><?= number_format($waktuGreedy, 8) ?> s</strong></div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;">No</th>
+                                <th>Nama Daerah</th>
+                                <th>Cost</th>
+                                <th>Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (count($hasilGreedy['lokasiTerpilih']) > 0): ?>
+                                <?php $no = 1;
+                                foreach ($hasilGreedy['lokasiTerpilih'] as $loc): ?>
+                                    <tr>
+                                        <td><?= $no++ ?></td>
+                                        <td><strong><?= htmlspecialchars($loc['nama_daerah']) ?></strong></td>
+                                        <td><?= $loc['cost'] ?></td>
+                                        <td><?= $loc['value'] ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <tr>
+                                    <td colspan="4" style="text-align: center; color: var(--text-muted);">Tidak ada lokasi terpilih (budget tidak mencukupi atau konflik jarak).</td>
+                                </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- DP Card -->
+                <div class="card-result">
+                    <h3>
+                        2. Pendekatan DP
+                        <span class="method-badge badge-dp">Knapsack 0-1</span>
+                    </h3>
+                    <div class="meta-info">
+                        <div>Value: <strong><?= $hasilDp['totalValue'] ?></strong></div>
+                        <div>Cost: <strong>Rp <?= number_format($hasilDp['totalCost'], 0, ',', '.') ?> Jt</strong></div>
+                        <div>Waktu: <strong><?= number_format($waktuDp, 8) ?> s</strong></div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;">No</th>
+                                <th>Nama Daerah</th>
+                                <th>Cost</th>
+                                <th>Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (count($hasilDp['lokasiTerpilih']) > 0): ?>
+                                <?php $no = 1;
+                                foreach ($hasilDp['lokasiTerpilih'] as $loc): ?>
+                                    <tr>
+                                        <td><?= $no++ ?></td>
+                                        <td><strong><?= htmlspecialchars($loc['nama_daerah']) ?></strong></td>
+                                        <td><?= $loc['cost'] ?></td>
+                                        <td><?= $loc['value'] ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <tr>
+                                    <td colspan="4" style="text-align: center; color: var(--text-muted);">Tidak ada lokasi terpilih (budget tidak mencukupi).</td>
+                                </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="card-result">
+                    <h3>
+                        1. Pendekatan branch and bound
+                        <span class="method-badge badge-greedy">branch and bound</span>
+                    </h3>
+                    <div class="meta-info">
+                        <div>Value: <strong><?= $hasilBnB['totalValue'] ?></strong></div>
+                        <div>Cost: <strong>Rp <?= number_format($hasilBnB['totalCost'], 0, ',', '.') ?> Jt</strong></div>
+                        <div>Waktu: <strong><?= number_format($waktuBnB, 8) ?> s</strong></div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;">No</th>
+                                <th>Nama Daerah</th>
+                                <th>Cost</th>
+                                <th>Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (count($hasilBnB['lokasiTerpilih']) > 0): ?>
+                                <?php $no = 1;
+                                foreach ($hasilBnB['lokasiTerpilih'] as $loc): ?>
+                                    <tr>
+                                        <td><?= $no++ ?></td>
+                                        <td><strong><?= htmlspecialchars($loc['nama_daerah']) ?></strong></td>
+                                        <td><?= $loc['cost'] ?></td>
+                                        <td><?= $loc['value'] ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <tr>
+                                    <td colspan="4" style="text-align: center; color: var(--text-muted);">Tidak ada lokasi terpilih (budget tidak mencukupi atau konflik jarak).</td>
+                                </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <h2 class="results-header" style="margin-top: 40px;">Visualisasi Komparasi Performa</h2>
+            <div class="chart-grid">
+                <div class="chart-card">
+                    <h4>Perbandingan Total Value (Semakin Besar Semakin Baik)</h4>
+                    <canvas id="valueChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h4>Perbandingan Waktu Eksekusi (Detik - Semakin Kecil Semakin Baik)</h4>
+                    <canvas id="timeChart"></canvas>
+                </div>
+            </div>
+
+            <script>
+                // Value comparison chart
+                const ctxValue = document.getElementById('valueChart').getContext('2d');
+                new Chart(ctxValue, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Greedy', 'Dynamic Programming', 'Branch and Bound'],
+                        datasets: [{
+                            label: 'Total Value',
+                            data: [<?= $hasilGreedy['totalValue'] ?>, <?= $hasilDp['totalValue'] ?>, <?= $hasilBnB['totalValue'] ?>],
+                            backgroundColor: ['#3b82f6', '#10b981', '#f59e0b'],
+                            borderColor: ['#2563eb', '#059669', '#d97706'],
+                            borderWidth: 1,
+                            borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: {
+                                    color: '#f1f5f9'
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Time execution comparison chart
+                const ctxTime = document.getElementById('timeChart').getContext('2d');
+                new Chart(ctxTime, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Greedy', 'Dynamic Programming', 'Branch and Bound'],
+                        datasets: [{
+                            label: 'Waktu Eksekusi (Detik)',
+                            data: [<?= sprintf('%.10f', $waktuGreedy) ?>, <?= sprintf('%.10f', $waktuDp) ?>, <?= sprintf('%.10f', $waktuBnB) ?>],
+                            backgroundColor: ['#ef4444', '#f59e0b', '#8b5cf6'],
+                            borderColor: ['#dc2626', '#d97706', '#7c3aed'],
+                            borderWidth: 1,
+                            borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: {
+                                    color: '#f1f5f9'
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false
+                                }
+                            }
+                        }
+                    }
+                });
+            </script>
+        <?php endif; ?>
     </div>
 
-    <?php if ($hasilGreedy !== null && $hasilDp !== null): ?>
-        <h2 class="results-header">Hasil Analisis Optimasi</h2>
-
-        <!-- Kesimpulan Card -->
-        <div class="alert alert-success">
-            <h3 style="margin-top: 0; font-size: 1.15rem; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                Kesimpulan Komparasi Rekomendasi
-            </h3>
-            <?php if ($hasilDp['totalValue'] > $hasilGreedy['totalValue']): ?>
-                <p>Metode <strong>Dynamic Programming (DP)</strong> memberikan hasil yang lebih baik karena menghasilkan Total Value yang lebih besar (<strong><?= $hasilDp['totalValue'] ?></strong>) dibandingkan Greedy (<strong><?= $hasilGreedy['totalValue'] ?></strong>).</p>
-            <?php elseif ($hasilGreedy['totalValue'] > $hasilDp['totalValue']): ?>
-                <p>Metode <strong>Greedy</strong> memberikan hasil yang lebih baik dengan Total Value yang lebih besar (<strong><?= $hasilGreedy['totalValue'] ?></strong>) dibandingkan DP (<strong><?= $hasilDp['totalValue'] ?></strong>).</p>
-            <?php else: ?>
-                <p>Kedua metode menghasilkan Total Value yang sama (<strong><?= $hasilGreedy['totalValue'] ?></strong>). Namun, jika ditinjau dari waktu komputasi:</p>
-                <p style="margin-top: 6px; font-weight: 500;">
-                    <?php if ($waktuGreedy < $waktuDp): ?>
-                        Metode <strong>Greedy</strong> lebih disarankan karena mengeksekusi algoritma lebih cepat (<strong><?= number_format($waktuGreedy, 8) ?> detik</strong>) dibandingkan DP (<strong><?= number_format($waktuDp, 8) ?> detik</strong>).
-                    <?php elseif ($waktuDp < $waktuGreedy): ?>
-                        Metode <strong>Dynamic Programming (DP)</strong> lebih disarankan karena mengeksekusi algoritma lebih cepat (<strong><?= number_format($waktuDp, 8) ?> detik</strong>) dibandingkan Greedy (<strong><?= number_format($waktuGreedy, 8) ?> detik</strong>).
-                    <?php else: ?>
-                        Keduanya memiliki waktu eksekusi yang identik.
-                    <?php endif; ?>
-                </p>
-            <?php endif; ?>
-        </div>
-
-        <div class="grid-results">
-            <!-- Greedy Card -->
-            <div class="card-result">
-                <h3>
-                    1. Pendekatan Greedy 
-                    <span class="method-badge badge-greedy">Greedy</span>
-                </h3>
-                <div class="meta-info">
-                    <div>Value: <strong><?= $hasilGreedy['totalValue'] ?></strong></div>
-                    <div>Cost: <strong>Rp <?= number_format($hasilGreedy['totalCost'], 0, ',', '.') ?> Jt</strong></div>
-                    <div>Waktu: <strong><?= number_format($waktuGreedy, 8) ?> s</strong></div>
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="width: 40px;">No</th>
-                            <th>Nama Daerah</th>
-                            <th>Cost</th>
-                            <th>Value</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (count($hasilGreedy['lokasiTerpilih']) > 0): ?>
-                            <?php $no = 1; foreach ($hasilGreedy['lokasiTerpilih'] as $loc): ?>
-                                <tr>
-                                    <td><?= $no++ ?></td>
-                                    <td><strong><?= htmlspecialchars($loc['nama_daerah']) ?></strong></td>
-                                    <td><?= $loc['cost'] ?></td>
-                                    <td><?= $loc['value'] ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php else: ?>
-                            <tr>
-                                <td colspan="4" style="text-align: center; color: var(--text-muted);">Tidak ada lokasi terpilih (budget tidak mencukupi atau konflik jarak).</td>
-                            </tr>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- DP Card -->
-            <div class="card-result">
-                <h3>
-                    2. Pendekatan DP
-                    <span class="method-badge badge-dp">Knapsack 0-1</span>
-                </h3>
-                <div class="meta-info">
-                    <div>Value: <strong><?= $hasilDp['totalValue'] ?></strong></div>
-                    <div>Cost: <strong>Rp <?= number_format($hasilDp['totalCost'], 0, ',', '.') ?> Jt</strong></div>
-                    <div>Waktu: <strong><?= number_format($waktuDp, 8) ?> s</strong></div>
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="width: 40px;">No</th>
-                            <th>Nama Daerah</th>
-                            <th>Cost</th>
-                            <th>Value</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (count($hasilDp['lokasiTerpilih']) > 0): ?>
-                            <?php $no = 1; foreach ($hasilDp['lokasiTerpilih'] as $loc): ?>
-                                <tr>
-                                    <td><?= $no++ ?></td>
-                                    <td><strong><?= htmlspecialchars($loc['nama_daerah']) ?></strong></td>
-                                    <td><?= $loc['cost'] ?></td>
-                                    <td><?= $loc['value'] ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php else: ?>
-                            <tr>
-                                <td colspan="4" style="text-align: center; color: var(--text-muted);">Tidak ada lokasi terpilih (budget tidak mencukupi).</td>
-                            </tr>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Charts Section -->
-        <h2 class="results-header" style="margin-top: 40px;">Visualisasi Komparasi Performa</h2>
-        <div class="chart-grid">
-            <div class="chart-card">
-                <h4>Perbandingan Total Value (Semakin Besar Semakin Baik)</h4>
-                <canvas id="valueChart"></canvas>
-            </div>
-            <div class="chart-card">
-                <h4>Perbandingan Waktu Eksekusi (Detik - Semakin Kecil Semakin Baik)</h4>
-                <canvas id="timeChart"></canvas>
-            </div>
-        </div>
-
-        <script>
-            // Value comparison chart
-            const ctxValue = document.getElementById('valueChart').getContext('2d');
-            new Chart(ctxValue, {
-                type: 'bar',
-                data: {
-                    labels: ['Greedy', 'Dynamic Programming'],
-                    datasets: [{
-                        label: 'Total Value',
-                        data: [<?= $hasilGreedy['totalValue'] ?>, <?= $hasilDp['totalValue'] ?>],
-                        backgroundColor: ['#3b82f6', '#10b981'],
-                        borderColor: ['#2563eb', '#059669'],
-                        borderWidth: 1,
-                        borderRadius: 6
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: { color: '#f1f5f9' }
-                        },
-                        x: {
-                            grid: { display: false }
-                        }
-                    }
-                }
-            });
-
-            // Time execution comparison chart
-            const ctxTime = document.getElementById('timeChart').getContext('2d');
-            new Chart(ctxTime, {
-                type: 'bar',
-                data: {
-                    labels: ['Greedy', 'Dynamic Programming'],
-                    datasets: [{
-                        label: 'Waktu Eksekusi (Detik)',
-                        data: [<?= sprintf('%.10f', $waktuGreedy) ?>, <?= sprintf('%.10f', $waktuDp) ?>],
-                        backgroundColor: ['#ef4444', '#f59e0b'],
-                        borderColor: ['#dc2626', '#d97706'],
-                        borderWidth: 1,
-                        borderRadius: 6
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: { color: '#f1f5f9' }
-                        },
-                        x: {
-                            grid: { display: false }
-                        }
-                    }
-                }
-            });
-        </script>
-    <?php endif; ?>
-</div>
-
 </body>
+
 </html>
