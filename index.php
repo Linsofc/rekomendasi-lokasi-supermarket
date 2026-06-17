@@ -410,7 +410,6 @@ $totalKandidat = count($daftarLokasi);
         </div>
     <?php endif; ?>
 
-<<<<<<< HEAD
     <?php if ($hasilGA !== null): ?>
         <!-- Split Results Layout -->
         <div class="result-layout">
@@ -421,36 +420,6 @@ $totalKandidat = count($daftarLokasi);
                 </div>
                 <h3 style="font-weight: 700; font-size: 1.2rem; color: #fff; margin-bottom: 4px;">Rekomendasi Terbaik</h3>
                 <p style="color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Skor Fitness Tertinggi (GA)</p>
-=======
-        <?php if ($hasilGreedy !== null && $hasilDp !== null): ?>
-            <h2 class="results-header">Hasil Analisis Optimasi</h2>
-
-            <!-- Kesimpulan Card -->
-            <div class="alert alert-success">
-                <h3 style="margin-top: 0; font-size: 1.15rem; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                    </svg>
-                    Kesimpulan Komparasi Rekomendasi
-                </h3>
-                <?php if ($hasilDp['totalValue'] > $hasilGreedy['totalValue'] and $hasilDp['totalValue'] > $hasilBnB['totalValue']): ?>
-                    <p>Metode <strong>Dynamic Programming (DP)</strong> memberikan hasil yang lebih baik karena menghasilkan Total Value yang lebih besar (<strong><?= $hasilDp['totalValue'] ?></strong>) dibandingkan Greedy (<strong><?= $hasilGreedy['totalValue'] ?></strong>) dan Branch and Bound (<strong><?= $hasilBnB['totalValue'] ?></strong>).</p>
-                <?php elseif ($hasilGreedy['totalValue'] > $hasilDp['totalValue'] and $hasilGreedy['totalValue'] > $hasilBnB['totalValue']): ?>
-                    <p>Metode <strong>Greedy</strong> memberikan hasil yang lebih baik dengan Total Value yang lebih besar (<strong><?= $hasilGreedy['totalValue'] ?></strong>) dibandingkan DP (<strong><?= $hasilDp['totalValue'] ?></strong>) dan Branch and Bound (<strong><?= $hasilBnB['totalValue'] ?></strong>).</p>
-                <?php else: ?>
-                    <p>Kedua metode menghasilkan Total Value yang sama (<strong><?= $hasilGreedy['totalValue'] ?></strong>). Namun, jika ditinjau dari waktu komputasi:</p>
-                    <p style="margin-top: 6px; font-weight: 500;">
-                        <?php if ($waktuGreedy < $waktuDp): ?>
-                            Metode <strong>Greedy</strong> lebih disarankan karena mengeksekusi algoritma lebih cepat (<strong><?= number_format($waktuGreedy, 8) ?> detik</strong>) dibandingkan DP (<strong><?= number_format($waktuDp, 8) ?> detik</strong>).
-                        <?php elseif ($waktuDp < $waktuGreedy): ?>
-                            Metode <strong>Dynamic Programming (DP)</strong> lebih disarankan karena mengeksekusi algoritma lebih cepat (<strong><?= number_format($waktuDp, 8) ?> detik</strong>) dibandingkan Greedy (<strong><?= number_format($waktuGreedy, 8) ?> detik</strong>).
-                        <?php else: ?>
-                            Keduanya memiliki waktu eksekusi yang identik.
-                        <?php endif; ?>
-                    </p>
-                <?php endif; ?>
->>>>>>> 95e2d917f2d85196141b3feb088bea60b7b11f46
             </div>
 
             <!-- Detailed Parameter Grid -->
@@ -464,7 +433,6 @@ $totalKandidat = count($daftarLokasi);
                         <div class="detail-label">Populasi Penduduk</div>
                         <div class="detail-value"><?= number_format($hasilGA['lokasiTerbaik']['populasi'], 0, ',', '.') ?> Ribu</div>
                     </div>
-<<<<<<< HEAD
                     <div class="detail-item">
                         <div class="detail-label">Pendapatan Masyarakat</div>
                         <div class="detail-value">Rp <?= number_format($hasilGA['lokasiTerbaik']['pendapatan'], 0, ',', '.') ?> Jt/Thn</div>
@@ -484,46 +452,6 @@ $totalKandidat = count($daftarLokasi);
                     <div class="detail-item">
                         <div class="detail-label">Volume Lalu Lintas</div>
                         <div class="detail-value"><?= number_format($hasilGA['lokasiTerbaik']['lalu_lintas'], 0, ',', '.') ?> Kend/Jam</div>
-=======
-                    <table>
-                        <thead>
-                            <tr>
-                                <th style="width: 40px;">No</th>
-                                <th>Nama Daerah</th>
-                                <th>Cost</th>
-                                <th>Value</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if (count($hasilDp['lokasiTerpilih']) > 0): ?>
-                                <?php $no = 1;
-                                foreach ($hasilDp['lokasiTerpilih'] as $loc): ?>
-                                    <tr>
-                                        <td><?= $no++ ?></td>
-                                        <td><strong><?= htmlspecialchars($loc['nama_daerah']) ?></strong></td>
-                                        <td><?= $loc['cost'] ?></td>
-                                        <td><?= $loc['value'] ?></td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            <?php else: ?>
-                                <tr>
-                                    <td colspan="4" style="text-align: center; color: var(--text-muted);">Tidak ada lokasi terpilih (budget tidak mencukupi).</td>
-                                </tr>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="card-result">
-                    <h3>
-                        3. Pendekatan branch and bound
-                        <span class="method-badge badge-greedy">branch and bound</span>
-                    </h3>
-                    <div class="meta-info">
-                        <div>Value: <strong><?= $hasilBnB['totalValue'] ?></strong></div>
-                        <div>Cost: <strong>Rp <?= number_format($hasilBnB['totalCost'], 0, ',', '.') ?> Jt</strong></div>
-                        <div>Waktu: <strong><?= number_format($waktuBnB, 8) ?> s</strong></div>
->>>>>>> 95e2d917f2d85196141b3feb088bea60b7b11f46
                     </div>
                 </div>
             </div>

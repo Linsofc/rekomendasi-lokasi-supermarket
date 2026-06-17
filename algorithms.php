@@ -42,51 +42,14 @@ function preprocess_and_normalize($daftarLokasi) {
                 $normalized[$k] = ($loc[$k] - $mins[$k]) / $denom;
             }
         }
-<<<<<<< HEAD
+
         $loc['normalized'] = $normalized;
-=======
-    }
-    
-    $hasilValue = $dpTable[$n][$maxBudget];
-    $w = $maxBudget;
-    $lokasiTerpilih = [];
-    $totalCost = 0;
-    
-    for ($i = $n; $i > 0; $i--) {
-        if ($hasilValue <= 0) {
-            break;
-        }
-        if ($hasilValue == $dpTable[$i - 1][$w]) {
-            continue;
-        } else {
-            $itemTerpilih = $daftarLokasi[$i - 1];
-            $lokasiTerpilih[] = $itemTerpilih;
-            $hasilValue -= $itemTerpilih['value'];
-            $w -= $itemTerpilih['cost'];
-            $totalCost += $itemTerpilih['cost'];
-        }
-    }
-    
-    return [
-        'metode' => 'Dynamic Programming',
-        'lokasiTerpilih' => $lokasiTerpilih,
-        'totalCost' => $totalCost,
-        'totalValue' => $dpTable[$n][$maxBudget]
-    ];
-}
-
-
-function jalankanBnB($daftarLokasi, $maxBudget, $batasJarak)
-{
-    foreach ($daftarLokasi as &$loc) {
-        $loc['rasio'] = $loc['cost'] > 0 ? $loc['value'] / $loc['cost'] : 0;
->>>>>>> 95e2d917f2d85196141b3feb088bea60b7b11f46
     }
     unset($loc);
+    
     return $daftarLokasi;
 }
 
-<<<<<<< HEAD
 // Perhitungan Nilai Fitness berdasarkan Rumus (1) di Jurnal
 function hitungFitness($loc, $weights) {
     $n = $loc['normalized'];
@@ -135,71 +98,10 @@ function jalankanGA($daftarLokasi, $maxGenerasi = 100, $ukuranPopulasi = 30) {
         $chrome = [];
         for ($g = 0; $g < $chromeLength; $g++) {
             $chrome[] = rand(0, 1);
-=======
-    usort($daftarLokasi, function ($a, $b) {
-        if ($a['rasio'] == $b['rasio']) {
-            return 0;
-        }
-        return ($a['rasio'] > $b['rasio']) ? -1 : 1;
-    });
-
-    $bestValue = 0;
-    $bestPath = [];
-    $n = count($daftarLokasi);
-
-    // PERBAIKAN: Masukkan parameter $currentPath agar tahu lokasi mana saja yang sudah diambil
-    $hitungBatasAtas = function ($index, $currentCost, $currentValue, $currentPath) use ($daftarLokasi, $maxBudget, $batasJarak, $n) {
-        if ($currentCost >= $maxBudget) {
-            return 0;
-        }
-
-        $bound = $currentValue;
-        $totalCost = $currentCost;
-        $i = $index;
-
-        // Simulasi jalur terpilih untuk pengecekan jarak di dalam bound
-        $simulatedPath = $currentPath;
-
-        while ($i < $n && ($totalCost + $daftarLokasi[$i]['cost'] <= $maxBudget)) {
-            // PERBAIKAN: Hanya hitung item yang lolos validasi jarak aman
-            if (cekJarakAman($daftarLokasi[$i], $simulatedPath, $batasJarak)) {
-                $totalCost += $daftarLokasi[$i]['cost'];
-                $bound += $daftarLokasi[$i]['value'];
-                $simulatedPath[] = $daftarLokasi[$i]; // Tambahkan ke simulasi jika aman
-            }
-            $i++;
-        }
-
-        // Bagian pecahan (fractional) juga hanya dihitung jika aman secara jarak
-        if ($i < $n && ($maxBudget - $totalCost) > 0) {
-            if (cekJarakAman($daftarLokasi[$i], $simulatedPath, $batasJarak)) {
-                $sisaKapasitas = $maxBudget - $totalCost;
-                $bound += $sisaKapasitas * $daftarLokasi[$i]['rasio'];
-            }
-        }
-
-        return $bound;
-    };
-
-    $dfs = function ($index, $currentCost, $currentValue, $currentPath) use (
-        &$dfs,
-        $daftarLokasi,
-        $maxBudget,
-        $batasJarak,
-        $n,
-        $hitungBatasAtas,
-        &$bestValue,
-        &$bestPath
-    ) {
-        if ($currentValue > $bestValue) {
-            $bestValue = $currentValue;
-            $bestPath = $currentPath;
->>>>>>> 95e2d917f2d85196141b3feb088bea60b7b11f46
         }
         $populasi[$i] = $evalIndividu($chrome);
     }
 
-<<<<<<< HEAD
     $historyFitness = [];
     $bestGlobal = null;
 
@@ -280,43 +182,6 @@ function jalankanGA($daftarLokasi, $maxGenerasi = 100, $ukuranPopulasi = 30) {
         }
 
         $populasi = $populasiBaru;
-=======
-        if ($index >= $n) {
-            return;
-        }
-
-        // PERBAIKAN: Mengirimkan $currentPath ke fungsi hitungBatasAtas
-        $batasAtas = $hitungBatasAtas($index, $currentCost, $currentValue, $currentPath);
-        if ($batasAtas <= $bestValue) {
-            return; // Pruning dilakukan dengan akurat sekarang
-        }
-
-        $item = $daftarLokasi[$index];
-
-        // CABANG KEPUTUSAN 1: PILIH LOKASI INI
-        if ($currentCost + $item['cost'] <= $maxBudget) {
-            if (cekJarakAman($item, $currentPath, $batasJarak)) {
-                $jalurBaru = $currentPath;
-                $jalurBaru[] = $item;
-                $dfs(
-                    $index + 1,
-                    $currentCost + $item['cost'],
-                    $currentValue + $item['value'],
-                    $jalurBaru
-                );
-            }
-        }
-
-        // CABANG KEPUTUSAN 2: LEWATKAN LOKASI INI
-        $dfs($index + 1, $currentCost, $currentValue, $currentPath);
-    };
-
-    $dfs(0, 0, 0, []);
-
-    $totalCost = 0;
-    foreach ($bestPath as $loc) {
-        $totalCost += $loc['cost'];
->>>>>>> 95e2d917f2d85196141b3feb088bea60b7b11f46
     }
 
     return [
