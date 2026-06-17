@@ -14,39 +14,71 @@ function load_raw_data() {
     }
 }
 
-// Langkah Pra-pemrosesan: Min-Max Scaling sesuai Rumus Jurnal
+/**
+ * Langkah Pra-pemrosesan: RANK-BASED NORMALIZATION
+ *
+ * Metode ini menggantikan Min-Max Scaling yang sensitif terhadap outlier.
+ * Cara kerja:
+ *   1. Setiap kriteria diurutkan dari terbaik ke terburuk → diberi peringkat (rank).
+ *   2. Peringkat dikonversi ke skor 0–1: skor = (N - rank) / (N - 1)
+ *      - Rank 1 (terbaik) → skor 1.0
+ *      - Rank N (terburuk) → skor 0.0
+ *   3. Nilai seri (tie) mendapat rata-rata peringkat (average rank).
+ *
+ * Keunggulan vs Min-Max:
+ *   - Tidak terpengaruh outlier/nilai ekstrem.
+ *   - Adil secara dinamis: berapapun nilai inputan, penilaian tetap proporsional.
+ *   - Menambah/mengurangi lokasi hanya mengubah posisi relatif, bukan merusak skor semua.
+ */
 function preprocess_and_normalize($daftarLokasi) {
     if (empty($daftarLokasi)) return [];
 
+    $n        = count($daftarLokasi);
     $kriteria = ['populasi', 'pendapatan', 'aksesibilitas', 'jarak_pesaing', 'sewa_tanah', 'lalu_lintas'];
-    $mins = [];
-    $maxs = [];
+    // Kriteria cost: nilai lebih rendah = lebih baik (rank 1)
+    $kriteriaKost = ['sewa_tanah'];
 
-    // Cari nilai min dan max untuk setiap kriteria
-    foreach ($kriteria as $k) {
-        $kolom = array_column($daftarLokasi, $k);
-        $mins[$k] = min($kolom);
-        $maxs[$k] = max($kolom);
-    }
-
-    foreach ($daftarLokasi as &$loc) {
-        $normalized = [];
-        foreach ($kriteria as $k) {
-            $denom = ($maxs[$k] - $mins[$k]) == 0 ? 1 : ($maxs[$k] - $mins[$k]);
-            
-            if ($k === 'sewa_tanah') {
-                // Kriteria Cost: (Xmax - Xij) / (Xmax - Xmin)
-                $normalized[$k] = ($maxs[$k] - $loc[$k]) / $denom;
-            } else {
-                // Kriteria Benefit: (Xij - Xmin) / (Xmax - Xmin)
-                $normalized[$k] = ($loc[$k] - $mins[$k]) / $denom;
-            }
+    foreach ($kriteria as $kriterion) {
+        // Kumpulkan nilai tiap lokasi beserta indeksnya
+        $entries = [];
+        foreach ($daftarLokasi as $idx => $loc) {
+            $entries[] = ['idx' => $idx, 'val' => (float)$loc[$kriterion]];
         }
 
-        $loc['normalized'] = $normalized;
+        // Urutkan: benefit → descending (besar = rank 1)
+        //          cost   → ascending  (kecil = rank 1)
+        if (in_array($kriterion, $kriteriaKost)) {
+            usort($entries, fn($a, $b) => $a['val'] <=> $b['val']); // kecil duluan
+        } else {
+            usort($entries, fn($a, $b) => $b['val'] <=> $a['val']); // besar duluan
+        }
+
+        // Hitung peringkat dengan penanganan nilai seri (average rank)
+        $rankMap = [];
+        $i = 0;
+        while ($i < $n) {
+            $j = $i;
+            // Temukan semua entri yang nilainya sama (tie)
+            while ($j < $n - 1 && $entries[$j]['val'] == $entries[$j + 1]['val']) {
+                $j++;
+            }
+            // Rata-rata peringkat untuk nilai seri (1-indexed)
+            $avgRank = (($i + 1) + ($j + 1)) / 2.0;
+            for ($t = $i; $t <= $j; $t++) {
+                $rankMap[$entries[$t]['idx']] = $avgRank;
+            }
+            $i = $j + 1;
+        }
+
+        // Konversi rank → normalized score: (N - rank) / (N - 1)
+        // Jika hanya 1 lokasi → skor = 1.0
+        foreach ($daftarLokasi as $idx => &$loc) {
+            $rank = $rankMap[$idx];
+            $loc['normalized'][$kriterion] = ($n === 1) ? 1.0 : ($n - $rank) / ($n - 1);
+        }
+        unset($loc);
     }
-    unset($loc);
-    
+
     return $daftarLokasi;
 }
 
@@ -66,127 +98,128 @@ function jalankanGA($daftarLokasi, $maxGenerasi = 100, $ukuranPopulasi = 30) {
     $n_lokasi = count($daftarLokasi);
     if ($n_lokasi == 0) return null;
 
-    // Definisikan bobot seimbang jika tidak diatur (Total = 1)
+    // Bobot seimbang — Total = 1
     $weights = ['w1'=>0.1667, 'w2'=>0.1667, 'w3'=>0.1667, 'w4'=>0.1667, 'w5'=>0.1667, 'w6'=>0.1667];
 
-    // Hitung jumlah bit yang diperlukan untuk merepresentasikan indeks (Chromosomes length)
-    // B = ceil(log2(N))
-    $chromeLength = (int)ceil(log(max(2, $n_lokasi), 2));
-
-    // Helper: Decode biner array menjadi integer desimal modulo N
-    $decodeIndex = function($chromosome) use ($n_lokasi) {
-        $decimal = 0;
-        foreach ($chromosome as $bit) {
-            $decimal = ($decimal << 1) | $bit;
-        }
-        return $decimal % $n_lokasi;
-    };
-
-    // Helper: Hitung fitness untuk individu biner
-    $evalIndividu = function($chromosome) use ($decodeIndex, $daftarLokasi, $weights) {
-        $index = $decodeIndex($chromosome);
+    // Representasi kromosom: integer langsung (indeks lokasi 0..N-1)
+    // Menghindari bias distribusi dari encoding biner dengan modulo.
+    $evalIndividu = function($indeks) use ($daftarLokasi, $weights) {
         return [
-            'chromosome' => $chromosome,
-            'indeks_lokasi' => $index,
-            'fitness' => hitungFitness($daftarLokasi[$index], $weights)
+            'indeks_lokasi' => $indeks,
+            'fitness'       => hitungFitness($daftarLokasi[$indeks], $weights)
         ];
     };
 
     // 1. Inisialisasi Populasi secara acak
     $populasi = [];
     for ($i = 0; $i < $ukuranPopulasi; $i++) {
-        $chrome = [];
-        for ($g = 0; $g < $chromeLength; $g++) {
-            $chrome[] = rand(0, 1);
-        }
-        $populasi[$i] = $evalIndividu($chrome);
+        $populasi[$i] = $evalIndividu(rand(0, $n_lokasi - 1));
     }
 
-    $historyFitness = [];
-    $bestGlobal = null;
+    $historyFitness    = [];
+    $historyAvgFitness = [];
+    $bestGlobal        = null;
 
     // Loop Generasi (Evolusi)
     for ($gen = 1; $gen <= $maxGenerasi; $gen++) {
-        // Cari individu terbaik dalam generasi saat ini untuk Elitism
-        $bestGen = $populasi[0];
+
+        // Cari individu terbaik dalam generasi ini
+        $bestGen     = $populasi[0];
+        $totalFitness = 0;
         foreach ($populasi as $ind) {
-            if ($ind['fitness'] > $bestGen['fitness']) {
-                $bestGen = $ind;
-            }
+            if ($ind['fitness'] > $bestGen['fitness']) $bestGen = $ind;
+            $totalFitness += $ind['fitness'];
         }
+        $avgFitness = $totalFitness / $ukuranPopulasi;
 
         // Update Best Global
         if ($bestGlobal === null || $bestGen['fitness'] > $bestGlobal['fitness']) {
             $bestGlobal = $bestGen;
         }
 
-        $historyFitness[$gen] = $bestGlobal['fitness'];
+        $historyFitness[$gen]    = round($bestGlobal['fitness'], 6);
+        $historyAvgFitness[$gen] = round($avgFitness, 6);
 
         // Siapkan populasi baru
         $populasiBaru = [];
 
-        // Terapkan Elitism: Salin 2 individu terbaik langsung ke generasi berikutnya
-        usort($populasi, function($a, $b) {
-            return $b['fitness'] <=> $a['fitness'];
-        });
+        // Elitism: 2 individu terbaik langsung lolos ke generasi berikutnya
+        usort($populasi, fn($a, $b) => $b['fitness'] <=> $a['fitness']);
         $populasiBaru[] = $populasi[0];
-        if ($ukuranPopulasi > 1) {
-            $populasiBaru[] = $populasi[1];
-        }
+        if ($ukuranPopulasi > 1) $populasiBaru[] = $populasi[1];
 
-        // Generate sisa populasi baru melalui Seleksi, Crossover, dan Mutasi
+        // Generate sisa populasi via Seleksi → Crossover → Mutasi
         while (count($populasiBaru) < $ukuranPopulasi) {
-            // A. SELEKSI: Tournament Selection (ukuran = 3)
+
+            // A. SELEKSI: Tournament Selection (k=3)
             $pilihParent = function() use ($populasi, $ukuranPopulasi) {
                 $best = $populasi[rand(0, $ukuranPopulasi - 1)];
                 for ($k = 0; $k < 2; $k++) {
-                    $opponent = $populasi[rand(0, $ukuranPopulasi - 1)];
-                    if ($opponent['fitness'] > $best['fitness']) {
-                        $best = $opponent;
-                    }
+                    $opp = $populasi[rand(0, $ukuranPopulasi - 1)];
+                    if ($opp['fitness'] > $best['fitness']) $best = $opp;
                 }
-                return $best['chromosome'];
+                return $best['indeks_lokasi'];
             };
 
-            $parent1 = $pilihParent();
-            $parent2 = $pilihParent();
+            $p1 = $pilihParent();
+            $p2 = $pilihParent();
 
-            // B. CROSSOVER: Single-Point Crossover (Probabilitas = 0.8)
-            $child1 = $parent1;
-            $child2 = $parent2;
-            if (rand(0, 100) < 80 && $chromeLength > 1) {
-                $crossPoint = rand(1, $chromeLength - 1);
-                for ($g = $crossPoint; $g < $chromeLength; $g++) {
-                    $child1[$g] = $parent2[$g];
-                    $child2[$g] = $parent1[$g];
-                }
+            // B. CROSSOVER: Uniform crossover (Pc = 0.8)
+            if (rand(0, 100) < 80) {
+                $c1 = (rand(0, 1) === 0) ? $p1 : $p2;
+                $c2 = (rand(0, 1) === 0) ? $p1 : $p2;
+            } else {
+                $c1 = $p1;
+                $c2 = $p2;
             }
 
-            // C. MUTASI: Bit-Flip Mutation (Probabilitas per bit = 0.1)
-            $mutate = function($chrome) use ($chromeLength) {
-                for ($g = 0; $g < $chromeLength; $g++) {
-                    if (rand(0, 100) < 10) {
-                        $chrome[$g] = $chrome[$g] === 1 ? 0 : 1;
-                    }
-                }
-                return $chrome;
-            };
+            // C. MUTASI: Random reset (Pm = 0.1)
+            if (rand(0, 100) < 10) $c1 = rand(0, $n_lokasi - 1);
+            if (rand(0, 100) < 10) $c2 = rand(0, $n_lokasi - 1);
 
-            $child1 = $mutate($child1);
-            $child2 = $mutate($child2);
-
-            $populasiBaru[] = $evalIndividu($child1);
+            $populasiBaru[] = $evalIndividu($c1);
             if (count($populasiBaru) < $ukuranPopulasi) {
-                $populasiBaru[] = $evalIndividu($child2);
+                $populasiBaru[] = $evalIndividu($c2);
             }
         }
 
         $populasi = $populasiBaru;
     }
 
+    // Hitung skor & ranking SEMUA alternatif secara deterministik
+    $semuaAlternatif = [];
+    foreach ($daftarLokasi as $idx => $loc) {
+        // Susun detail skor normalisasi per kriteria
+        $n = $loc['normalized'];
+        $semuaAlternatif[] = [
+            'lokasi'        => $loc,
+            'fitness'       => round(hitungFitness($loc, $weights), 6),
+            'skor_kriteria' => [
+                'populasi'       => round($n['populasi'],       4),
+                'pendapatan'     => round($n['pendapatan'],     4),
+                'aksesibilitas'  => round($n['aksesibilitas'],  4),
+                'jarak_pesaing'  => round($n['jarak_pesaing'],  4),
+                'sewa_tanah'     => round($n['sewa_tanah'],     4),
+                'lalu_lintas'    => round($n['lalu_lintas'],    4),
+            ],
+            'ranking' => 0,
+        ];
+    }
+
+    // Urutkan dari fitness tertinggi ke terendah & beri nomor ranking
+    usort($semuaAlternatif, fn($a, $b) => $b['fitness'] <=> $a['fitness']);
+    foreach ($semuaAlternatif as $i => &$alt) {
+        $alt['ranking'] = $i + 1;
+    }
+    unset($alt);
+
     return [
-        'lokasiTerbaik' => $daftarLokasi[$bestGlobal['indeks_lokasi']],
-        'fitnessTerbaik' => $bestGlobal['fitness'],
-        'history' => $historyFitness
+        'lokasiTerbaik'   => $daftarLokasi[$bestGlobal['indeks_lokasi']],
+        'fitnessTerbaik'  => round($bestGlobal['fitness'], 6),
+        'history'         => $historyFitness,
+        'historyAvg'      => $historyAvgFitness,
+        'semuaAlternatif' => $semuaAlternatif,
+        'weights'         => $weights,
+        'totalLokasi'     => $n_lokasi,
     ];
 }
