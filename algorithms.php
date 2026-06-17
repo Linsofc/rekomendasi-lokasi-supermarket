@@ -131,13 +131,11 @@ function jalankanDp($daftarLokasi, $maxBudget) {
 
 function jalankanBnB($daftarLokasi, $maxBudget, $batasJarak)
 {
-    // Menghitung rasio bobot utilitas per biaya
     foreach ($daftarLokasi as &$loc) {
         $loc['rasio'] = $loc['cost'] > 0 ? $loc['value'] / $loc['cost'] : 0;
     }
     unset($loc);
 
-    // Urutkan menurun agar estimasi batas atas (upper bound) optimal
     usort($daftarLokasi, function ($a, $b) {
         if ($a['rasio'] == $b['rasio']) {
             return 0;
@@ -149,7 +147,8 @@ function jalankanBnB($daftarLokasi, $maxBudget, $batasJarak)
     $bestPath = [];
     $n = count($daftarLokasi);
 
-    $hitungBatasAtas = function ($index, $currentCost, $currentValue) use ($daftarLokasi, $maxBudget, $n) {
+    // PERBAIKAN: Masukkan parameter $currentPath agar tahu lokasi mana saja yang sudah diambil
+    $hitungBatasAtas = function ($index, $currentCost, $currentValue, $currentPath) use ($daftarLokasi, $maxBudget, $batasJarak, $n) {
         if ($currentCost >= $maxBudget) {
             return 0;
         }
@@ -158,17 +157,25 @@ function jalankanBnB($daftarLokasi, $maxBudget, $batasJarak)
         $totalCost = $currentCost;
         $i = $index;
 
-        // Ambil item penuh selama anggaran masih muat
+        // Simulasi jalur terpilih untuk pengecekan jarak di dalam bound
+        $simulatedPath = $currentPath;
+
         while ($i < $n && ($totalCost + $daftarLokasi[$i]['cost'] <= $maxBudget)) {
-            $totalCost += $daftarLokasi[$i]['cost'];
-            $bound += $daftarLokasi[$i]['value'];
+            // PERBAIKAN: Hanya hitung item yang lolos validasi jarak aman
+            if (cekJarakAman($daftarLokasi[$i], $simulatedPath, $batasJarak)) {
+                $totalCost += $daftarLokasi[$i]['cost'];
+                $bound += $daftarLokasi[$i]['value'];
+                $simulatedPath[] = $daftarLokasi[$i]; // Tambahkan ke simulasi jika aman
+            }
             $i++;
         }
 
-        // Ambil bagian pecahan (fractional) dari item pembatas untuk estimasi optimis terbaik
-        if ($i < $n) {
-            $sisaKapasitas = $maxBudget - $totalCost;
-            $bound += $sisaKapasitas * $daftarLokasi[$i]['rasio'];
+        // Bagian pecahan (fractional) juga hanya dihitung jika aman secara jarak
+        if ($i < $n && ($maxBudget - $totalCost) > 0) {
+            if (cekJarakAman($daftarLokasi[$i], $simulatedPath, $batasJarak)) {
+                $sisaKapasitas = $maxBudget - $totalCost;
+                $bound += $sisaKapasitas * $daftarLokasi[$i]['rasio'];
+            }
         }
 
         return $bound;
@@ -184,27 +191,24 @@ function jalankanBnB($daftarLokasi, $maxBudget, $batasJarak)
         &$bestValue,
         &$bestPath
     ) {
-        // Jika status jalur saat ini menghasilkan total utilitas yang lebih tinggi, perbarui solusi terbaik
         if ($currentValue > $bestValue) {
             $bestValue = $currentValue;
             $bestPath = $currentPath;
         }
 
-        // Base case: jika semua lokasi telah dievaluasi
         if ($index >= $n) {
             return;
         }
 
-        // Pruning (Pemangkasan 1): Bandingkan estimasi batas atas (Upper Bound) dengan pencapaian terbaik saat ini
-        $batasAtas = $hitungBatasAtas($index, $currentCost, $currentValue);
+        // PERBAIKAN: Mengirimkan $currentPath ke fungsi hitungBatasAtas
+        $batasAtas = $hitungBatasAtas($index, $currentCost, $currentValue, $currentPath);
         if ($batasAtas <= $bestValue) {
-            return; // Potong cabang ini karena tidak menjanjikan solusi yang lebih baik
+            return; // Pruning dilakukan dengan akurat sekarang
         }
 
         $item = $daftarLokasi[$index];
 
-        // CABANG KEPUTUSAN 1: PILIH LOKASI INI (x_index = 1)
-        // Hanya dieksekusi jika anggaran mencukupi dan lokasi baru aman secara spasial
+        // CABANG KEPUTUSAN 1: PILIH LOKASI INI
         if ($currentCost + $item['cost'] <= $maxBudget) {
             if (cekJarakAman($item, $currentPath, $batasJarak)) {
                 $jalurBaru = $currentPath;
@@ -218,14 +222,12 @@ function jalankanBnB($daftarLokasi, $maxBudget, $batasJarak)
             }
         }
 
-        // CABANG KEPUTUSAN 2: LEWATKAN LOKASI INI (x_index = 0)
+        // CABANG KEPUTUSAN 2: LEWATKAN LOKASI INI
         $dfs($index + 1, $currentCost, $currentValue, $currentPath);
     };
 
-    // Memulai penelusuran dari indeks ke-0 dengan kondisi awal kosong
     $dfs(0, 0, 0, []);
 
-    // Kalkulasi ulang total biaya dari jalur terbaik yang dipilih
     $totalCost = 0;
     foreach ($bestPath as $loc) {
         $totalCost += $loc['cost'];

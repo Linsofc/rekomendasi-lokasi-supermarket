@@ -436,10 +436,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$dbEmpty && !$dbError) {
                     </svg>
                     Kesimpulan Komparasi Rekomendasi
                 </h3>
-                <?php if ($hasilDp['totalValue'] > $hasilGreedy['totalValue']): ?>
-                    <p>Metode <strong>Dynamic Programming (DP)</strong> memberikan hasil yang lebih baik karena menghasilkan Total Value yang lebih besar (<strong><?= $hasilDp['totalValue'] ?></strong>) dibandingkan Greedy (<strong><?= $hasilGreedy['totalValue'] ?></strong>).</p>
-                <?php elseif ($hasilGreedy['totalValue'] > $hasilDp['totalValue']): ?>
-                    <p>Metode <strong>Greedy</strong> memberikan hasil yang lebih baik dengan Total Value yang lebih besar (<strong><?= $hasilGreedy['totalValue'] ?></strong>) dibandingkan DP (<strong><?= $hasilDp['totalValue'] ?></strong>).</p>
+                <?php if ($hasilDp['totalValue'] > $hasilGreedy['totalValue'] and $hasilDp['totalValue'] > $hasilBnB['totalValue']): ?>
+                    <p>Metode <strong>Dynamic Programming (DP)</strong> memberikan hasil yang lebih baik karena menghasilkan Total Value yang lebih besar (<strong><?= $hasilDp['totalValue'] ?></strong>) dibandingkan Greedy (<strong><?= $hasilGreedy['totalValue'] ?></strong>) dan Branch and Bound (<strong><?= $hasilBnB['totalValue'] ?></strong>).</p>
+                <?php elseif ($hasilGreedy['totalValue'] > $hasilDp['totalValue'] and $hasilGreedy['totalValue'] > $hasilBnB['totalValue']): ?>
+                    <p>Metode <strong>Greedy</strong> memberikan hasil yang lebih baik dengan Total Value yang lebih besar (<strong><?= $hasilGreedy['totalValue'] ?></strong>) dibandingkan DP (<strong><?= $hasilDp['totalValue'] ?></strong>) dan Branch and Bound (<strong><?= $hasilBnB['totalValue'] ?></strong>).</p>
                 <?php else: ?>
                     <p>Kedua metode menghasilkan Total Value yang sama (<strong><?= $hasilGreedy['totalValue'] ?></strong>). Namun, jika ditinjau dari waktu komputasi:</p>
                     <p style="margin-top: 6px; font-weight: 500;">
@@ -537,7 +537,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$dbEmpty && !$dbError) {
 
                 <div class="card-result">
                     <h3>
-                        1. Pendekatan branch and bound
+                        3. Pendekatan branch and bound
                         <span class="method-badge badge-greedy">branch and bound</span>
                     </h3>
                     <div class="meta-info">
